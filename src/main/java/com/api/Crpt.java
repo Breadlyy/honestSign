@@ -34,13 +34,10 @@ public class Crpt {
         this.intervalInSeconds = timeUnit.toSeconds(1);
         scheduler.scheduleAtFixedRate(this::resetRequestCount, 0, intervalInSeconds, TimeUnit.SECONDS);
     }
-    private void resetRequestCount() {
-        synchronized (lock) {
-            // Reset the request count at the beginning of each interval
-            requestCount = 0;
-        }
-    }
     public static void main(String[] args) {
+        // в методе мэйна создает класс Crpt с ограничением 1 запрос в секунду
+        // после создаем сам документ для отправки и фиктивную подпись
+        // и в цикле for 5 раз отправляем post запрос
         Crpt crpt = new Crpt(TimeUnit.SECONDS, 1);
 
         DocumentRequest documentRequest = new DocumentRequest();
@@ -52,20 +49,20 @@ public class Crpt {
         }
         crpt.shutdown();
     }
-    private long convertToRatePerSecond(TimeUnit timeUnit, int requestLimit) {
-        return switch (timeUnit) {
-            case SECONDS -> requestLimit;
-            case MINUTES -> requestLimit * 60;
-            case HOURS -> requestLimit * 3600;
-            default -> throw new IllegalArgumentException("Invalid time unit");
-        };
+    private void resetRequestCount() {
+        synchronized (lock) {
+            requestCount = 0;
+        }
     }
 
     public void createDocument(DocumentRequest documentRequest, String signature) {
             synchronized (lock) {
+                // если количество отправок будет превышено то вызовется метод scheduleRetry
+                // для повторной отправки запросов используется класс ScheduledExecutorService, чтобы запросы откладывались,
+                // а не выкидывали ошибку
                 if (requestCount < requestLimit) {
                     requestCount++;
-                    // Call the API to create a document here
+                    // в методе документ для отправки преобразуется в json
                     String jsonRequestBody = prepareJsonRequest(documentRequest, signature);
                     try {
                         URL url = new URL(apiUrl);
@@ -101,7 +98,6 @@ public class Crpt {
     }
     private void scheduleRetry(DocumentRequest documentRequest, String signature) {
         scheduler.schedule(() -> {
-            // Сбрасываем счетчик запросов и повторяем запрос
             requestCount = 0;
             createDocument(documentRequest, signature);
         }, intervalInSeconds, TimeUnit.SECONDS);
@@ -115,10 +111,9 @@ public class Crpt {
         return requestBody.toString();
     }
     public void shutdown() {
-        // Останавливаем планировщик при завершении работы
+
         scheduler.shutdown();
     }
-    // Define your DocumentRequest class according to the provided JSON structure
 
     @Getter @Setter
     @NoArgsConstructor
